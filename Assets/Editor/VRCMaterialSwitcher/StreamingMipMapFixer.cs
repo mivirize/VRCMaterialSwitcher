@@ -60,14 +60,21 @@ namespace VRCMaterialSwitcher
             EditorUtility.DisplayDialog("Fix Streaming Mip Maps", msg, "OK");
         }
 
-        [MenuItem("Tools/VRC Material Switcher/Fix Streaming Mip Maps (Active Avatar)")]
-        public static void FixActiveAvatar()
+        [MenuItem("Tools/VRC Material Switcher/Fix Streaming Mip Maps (Scene Avatars)")]
+        public static void FixSceneAvatars()
         {
             // シーン内のアバタールートを探す
             var descriptors = Object.FindObjectsOfType<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
             if (descriptors.Length == 0)
             {
                 EditorUtility.DisplayDialog("Fix Streaming Mip Maps", "シーンにアバターが見つかりません。", "OK");
+                return;
+            }
+
+            if (!EditorUtility.DisplayDialog("Fix Streaming Mip Maps (Scene Avatars)",
+                $"シーン内の {descriptors.Length} 体のアバターが参照するテクスチャのうち、Mipmap が有効で Streaming Mip Maps が無効なものを一括で有効にしますか？",
+                "はい", "いいえ"))
+            {
                 return;
             }
 
@@ -101,6 +108,9 @@ namespace VRCMaterialSwitcher
                                 processed.Add(path);
 
                                 var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                                if (importer == null) continue;
+                                if (!importer.mipmapEnabled || importer.streamingMipmaps) continue;
+
                                 importer.streamingMipmaps = true;
                                 importer.SaveAndReimport();
                                 fixedCount++;

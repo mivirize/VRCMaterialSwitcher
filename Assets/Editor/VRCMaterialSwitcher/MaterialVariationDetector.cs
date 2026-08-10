@@ -52,6 +52,53 @@ namespace VRCMaterialSwitcher
             "materialpack", "_materialpack", "material pack",
         };
 
+        /// <summary>
+        /// ユーザー拡張キーワードファイル。組み込み辞書に無い色名・柄名（作者固有名や日本語ローマ字など）を
+        /// プロジェクトごとに追加できる。書式:
+        ///   { "colorKeywords": ["sakura", "yamabuki"], "genericFolderNames": ["textures"] }
+        /// </summary>
+        public const string UserKeywordsPath = "ProjectSettings/VRCMaterialSwitcherKeywords.json";
+
+        [Serializable]
+        private class UserKeywords
+        {
+            public string[] colorKeywords = new string[0];
+            public string[] genericFolderNames = new string[0];
+        }
+
+        private static bool userKeywordsLoaded;
+
+        /// <summary>ユーザー拡張キーワードを組み込み辞書へマージする（初回スキャン時に自動実行）。</summary>
+        public static void LoadUserKeywords()
+        {
+            if (userKeywordsLoaded) return;
+            userKeywordsLoaded = true;
+
+            try
+            {
+                if (!File.Exists(UserKeywordsPath)) return;
+                var loaded = JsonUtility.FromJson<UserKeywords>(File.ReadAllText(UserKeywordsPath));
+                if (loaded == null) return;
+
+                foreach (var k in loaded.colorKeywords)
+                    if (!string.IsNullOrWhiteSpace(k)) ColorKeywords.Add(k.Trim());
+                foreach (var k in loaded.genericFolderNames)
+                    if (!string.IsNullOrWhiteSpace(k)) GenericFolderNames.Add(k.Trim());
+
+                Debug.Log($"[VRC Material Switcher] ユーザーキーワードを読み込みました: {UserKeywordsPath}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[VRC Material Switcher] キーワードファイルの読み込みに失敗: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 直近のスキャンでどのグループにも入らなかったマテリアル名（単独パーツ等）。
+        /// UI で「未分類」として表示し、手動グループ化の手がかりにする。
+        /// </summary>
+        public static List<string> LastUngroupedMaterials { get; private set; } = new List<string>();
+
         // UVトークン検出（UV1, uv_2, UV 3 など）
         private static readonly Regex UvRegex = new Regex(@"[Uu][Vv]\s*_?\s*(\d+)", RegexOptions.Compiled);
 
@@ -66,6 +113,9 @@ namespace VRCMaterialSwitcher
         /// <returns>検出されたマテリアルグループのリスト</returns>
         public static List<MaterialGroup> DetectVariations(string folderPath, bool recursive = true)
         {
+            LoadUserKeywords();
+            LastUngroupedMaterials = new List<string>();
+
             if (string.IsNullOrEmpty(folderPath) || !AssetDatabase.IsValidFolder(folderPath))
             {
                 Debug.LogWarning($"[VRC Material Switcher] 無効なフォルダパス: {folderPath}");
@@ -180,11 +230,20 @@ namespace VRCMaterialSwitcher
             foreach (var key in order)
             {
                 var bucket = buckets[key];
-                if (bucket.items.Count < 2) continue; // 単独パーツ（切替不能）は除外
+                if (bucket.items.Count < 2)
+                {
+                    // 単独パーツ（切替不能）は除外するが、UI で手動グループ化できるよう記録する
+                    foreach (var it in bucket.items)
+                        LastUngroupedMaterials.Add(it.rawName);
+                    continue;
+                }
 
                 var group = BuildGroupFromBucket(bucket);
                 if (group != null && group.variations.Count >= 2)
                     result.Add(group);
+                else if (group != null)
+                    foreach (var v in group.variations)
+                        LastUngroupedMaterials.Add(v.material != null ? v.material.name : v.displayName);
             }
             return result;
         }
@@ -199,15 +258,9 @@ namespace VRCMaterialSwitcher
 
             // ファイル側の候補文字列（UV除去 → グループ共通プレフィックス除去）
             var fileRaw = bucket.items.Select(it => StripUv(it.rawName)).ToList();
-            string lcp = LongestCommonTokenPrefix(fileRaw);
-            var fileParts = new List<string>(n);
-            for (int i = 0; i < n; i++)
-            {
-                string s = fileRaw[i];
-                if (!string.IsNullOrEmpty(lcp) && s.Length > lcp.Length)
-                    s = s.Substring(lcp.Length);
-                fileParts.Add(s.Trim(' ', '_', '-', '.'));
-            }
+            var fileParts = StripCommonTokenPrefix(fileRaw)
+                .Select(s => s.Trim(' ', '_', '-', '.'))
+                .ToList();
 
             // フォルダ側の候補文字列（共通祖先からの相対パス。ネスト構造で色＋柄を保持）
             var folderParts = BuildFolderLabels(bucket.items.Select(it => it.folder).ToList());
@@ -257,6 +310,18 @@ namespace VRCMaterialSwitcher
 
             if (group.variations.Count > 0)
                 group.variations[0].isDefault = true;
+
+            // シェーダーが混在するグループは別パーツ混入の可能性があるため警告を付ける
+            var shaders = group.variations
+                .Where(v => v.material != null && v.material.shader != null)
+                .Select(v => v.material.shader.name)
+                .Distinct()
+                .ToList();
+            if (shaders.Count > 1)
+            {
+                group.warning = $"シェーダーが混在しています ({string.Join(", ", shaders)})。" +
+                                "別パーツのマテリアルが混ざっていないか確認してください。";
+            }
 
             return group;
         }
@@ -340,32 +405,35 @@ namespace VRCMaterialSwitcher
         }
 
         /// <summary>
-        /// 複数の名前から「_ 区切りの共通トークンプレフィックス」を求める。
-        /// 例: ["Kaku_Obi_Kenjo_Brown","Kaku_Obi_Shima_Red","Kaku_Obi_Tunagi"] → "Kaku_Obi"
-        /// 共通部分が無ければ空文字。全トークンが一致する場合は末尾1トークンをバリアント側に残す。
+        /// 複数の名前から共通トークンプレフィックスを取り除いた残り（バリアント部）を返す。
+        /// 例: ["Kaku_Obi_Kenjo_Brown","Kaku_Obi_Shima_Red","Kaku_Obi_Tunagi"]
+        ///     → ["Kenjo Brown","Shima Red","Tunagi"]
+        /// トークン分割は TokenSplit（_ 空白 - . 括弧）で統一する（旧実装は '_' のみで、
+        /// スペース・ハイフン区切りの命名から共通部を検出できなかった）。
+        /// 全トークンが一致する場合は末尾1トークンをバリアント側に残す。
         /// </summary>
-        private static string LongestCommonTokenPrefix(List<string> names)
+        private static List<string> StripCommonTokenPrefix(List<string> names)
         {
-            if (names == null || names.Count < 2) return "";
+            if (names == null) return new List<string>();
+            if (names.Count < 2) return new List<string>(names);
 
-            var tokenLists = names.Select(n => n.Split('_')).ToList();
-            int minLen = tokenLists.Min(t => t.Length);
+            var tokenLists = names.Select(nm => NormTokens(nm).ToList()).ToList();
+            int minLen = tokenLists.Min(t => t.Count);
 
-            var prefixTokens = new List<string>();
-            for (int i = 0; i < minLen; i++)
+            int common = 0;
+            while (common < minLen)
             {
-                string token = tokenLists[0][i];
-                if (tokenLists.All(t => t[i] == token))
-                    prefixTokens.Add(token);
-                else
+                string token = tokenLists[0][common];
+                if (!tokenLists.All(t => string.Equals(t[common], token, StringComparison.OrdinalIgnoreCase)))
                     break;
+                common++;
             }
 
-            // 全トークン一致（＝ほぼ同名）の場合は最後の1トークンをバリアントに残す
-            if (prefixTokens.Count >= minLen && prefixTokens.Count > 0)
-                prefixTokens.RemoveAt(prefixTokens.Count - 1);
+            // 全トークン一致（＝ほぼ同名）の場合は最後の1トークンをバリアント側に残す
+            if (common >= minLen && common > 0)
+                common--;
 
-            return string.Join("_", prefixTokens);
+            return tokenLists.Select(t => string.Join(" ", t.Skip(common))).ToList();
         }
 
         /// <summary>
@@ -412,6 +480,7 @@ namespace VRCMaterialSwitcher
                 // 浴衣の上下（Yukata A/B）のように複数メッシュへ適用されるケースに対応。
                 var targets = new List<MaterialRenderTarget>();
                 var seen = new HashSet<string>();
+                Material currentMaterial = null;
                 foreach (var renderer in renderers)
                 {
                     var sharedMats = renderer.sharedMaterials;
@@ -424,6 +493,8 @@ namespace VRCMaterialSwitcher
                             if (seen.Add(key))
                             {
                                 targets.Add(new MaterialRenderTarget(path, i));
+                                if (currentMaterial == null)
+                                    currentMaterial = sharedMats[i];
                             }
                         }
                     }
@@ -436,6 +507,15 @@ namespace VRCMaterialSwitcher
                     group.rendererPath = targets[0].rendererPath;
                     group.materialSlotIndex = targets[0].materialSlotIndex;
                     mappedCount++;
+
+                    // 既定バリエーションを「アバターに現在適用中のマテリアル」に合わせる
+                    // （アルファベット順先頭を既定にすると、着せたまま色が変わって見える事故になる）
+                    var current = group.variations.FirstOrDefault(v => v.material == currentMaterial);
+                    if (current != null && !current.isDefault)
+                    {
+                        foreach (var v in group.variations) v.isDefault = false;
+                        current.isDefault = true;
+                    }
                 }
             }
 
