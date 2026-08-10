@@ -17,6 +17,13 @@ namespace VRCMaterialSwitcher
         /// <summary>対応するマテリアルアセット</summary>
         public Material material;
 
+        /// <summary>
+        /// material の Asset GUID。
+        /// JsonUtility は Object 参照をセッション限りの Instance ID で記録するため、
+        /// エディタ再起動をまたぐ復元はこの GUID から行う。
+        /// </summary>
+        public string materialGuid;
+
         /// <summary>デフォルトバリエーションかどうか</summary>
         public bool isDefault;
 
@@ -74,6 +81,10 @@ namespace VRCMaterialSwitcher
         /// <summary>UI上の折りたたみ状態</summary>
         [NonSerialized]
         public bool foldout = true;
+
+        /// <summary>検出時の警告（シェーダー混在など）。UI表示用・非永続。</summary>
+        [NonSerialized]
+        public string warning;
 
         /// <summary>
         /// 対象レンダラーのパス（アバタールートからの相対パス）。
@@ -176,6 +187,48 @@ namespace VRCMaterialSwitcher
 
         /// <summary>VRC SDK直接操作（MAなし環境用）</summary>
         DirectSDK
+    }
+
+    /// <summary>
+    /// SwitcherConfig の保存・復元時にマテリアル参照と Asset GUID を相互変換するヘルパー。
+    /// </summary>
+    public static class SwitcherConfigPersistence
+    {
+        /// <summary>保存前に呼ぶ。現在のマテリアル参照から GUID を記録する。</summary>
+        public static void CaptureAssetReferences(SwitcherConfig config)
+        {
+            if (config?.materialGroups == null) return;
+            foreach (var group in config.materialGroups)
+            {
+                foreach (var v in group.variations)
+                {
+                    if (v.material != null)
+                    {
+                        string path = UnityEditor.AssetDatabase.GetAssetPath(v.material);
+                        if (!string.IsNullOrEmpty(path))
+                            v.materialGuid = UnityEditor.AssetDatabase.AssetPathToGUID(path);
+                    }
+                }
+            }
+        }
+
+        /// <summary>ロード後に呼ぶ。参照が切れているマテリアルを GUID から復元する。</summary>
+        public static void ResolveAssetReferences(SwitcherConfig config)
+        {
+            if (config?.materialGroups == null) return;
+            foreach (var group in config.materialGroups)
+            {
+                foreach (var v in group.variations)
+                {
+                    if (v.material == null && !string.IsNullOrEmpty(v.materialGuid))
+                    {
+                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(v.materialGuid);
+                        if (!string.IsNullOrEmpty(path))
+                            v.material = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(path);
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>

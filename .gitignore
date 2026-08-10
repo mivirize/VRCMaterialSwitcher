@@ -32,3 +32,6 @@ desktop.ini
 .vs/
 *.swp
 *~
+
+# Distribution artifacts (shipped via GitHub Releases, not the repo)
+*.unitypackage
