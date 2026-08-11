@@ -1,6 +1,8 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,22 +15,33 @@ namespace VRCMaterialSwitcher
     /// </summary>
     public static class PackageExporter
     {
-        // 配布対象（開発専用の PackageExporter.cs は含めない）
-        private static readonly string[] DistributedAssets =
+        private const string SourceDir = "Assets/Editor/VRCMaterialSwitcher";
+
+        /// <summary>配布に含めないファイル（開発専用）</summary>
+        private static readonly HashSet<string> ExcludedFiles = new HashSet<string>
         {
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherData.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialVariationDetector.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherSetup.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherWindow.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherWindow.Groups.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherWindow.Renderers.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherWindow.Setup.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherConfigIO.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherCostCalculator.cs",
-            "Assets/Editor/VRCMaterialSwitcher/MaterialSwitcherTextureAnalyzer.cs",
-            "Assets/Editor/VRCMaterialSwitcher/ParamResidueCleaner.cs",
-            "Assets/Editor/VRCMaterialSwitcher/StreamingMipMapFixer.cs",
+            "PackageExporter.cs",
         };
+
+        /// <summary>
+        /// 配布対象を「ソースフォルダ内の .cs から開発専用を除いたもの」として自動導出する。
+        /// 手書きのリストはファイル追加時に更新を忘れやすく、
+        /// 実際に v1.2.1 で新規クラスが梱包から抜ける事故が起きたため列挙方式にした。
+        /// </summary>
+        private static string[] CollectDistributedAssets()
+        {
+            var paths = Directory
+                .GetFiles(SourceDir, "*.cs", SearchOption.TopDirectoryOnly)
+                .Select(p => p.Replace("\\", "/"))
+                .Where(p => !ExcludedFiles.Contains(Path.GetFileName(p)))
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToArray();
+
+            if (paths.Length == 0)
+                throw new InvalidOperationException($"配布対象が見つかりません: {SourceDir}");
+
+            return paths;
+        }
 
         [MenuItem("Tools/VRC Material Switcher/Export UnityPackage (Dev)")]
         public static void Export()
@@ -48,8 +61,10 @@ namespace VRCMaterialSwitcher
                 if (string.IsNullOrEmpty(outputPath)) return;
             }
 
-            Debug.Log($"[Export] {outputPath} の作成を開始します...");
-            AssetDatabase.ExportPackage(DistributedAssets, outputPath, ExportPackageOptions.Default);
+            var assets = CollectDistributedAssets();
+            Debug.Log($"[Export] {outputPath} の作成を開始します（{assets.Length} ファイル）...");
+            foreach (var a in assets) Debug.Log($"[Export]   {a}");
+            AssetDatabase.ExportPackage(assets, outputPath, ExportPackageOptions.Default);
             Debug.Log($"[Export] パッケージの作成が完了しました: {outputPath}");
 
             if (Application.isBatchMode)

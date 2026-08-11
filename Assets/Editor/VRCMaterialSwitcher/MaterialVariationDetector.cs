@@ -361,6 +361,21 @@ namespace VRCMaterialSwitcher
             return result;
         }
 
+        // ---- 照合器（MaterialSwitcherRendererMatcher）と共有する解析ヘルパー ----
+
+        /// <summary>区切り文字でトークン分割する（照合器と規則を共有するため公開）。</summary>
+        public static IEnumerable<string> SplitTokens(string s) => NormTokens(s);
+
+        /// <summary>名前から UV トークンを除去する（照合器と規則を共有するため公開）。</summary>
+        public static string StripUvToken(string s) => StripUv(s);
+
+        /// <summary>トークンが色・柄（＝バリエーション軸）を表すか（照合器と辞書を共有するため公開）。</summary>
+        public static bool IsColorToken(string token)
+        {
+            LoadUserKeywords();
+            return !string.IsNullOrEmpty(token) && ColorKeywords.Contains(token);
+        }
+
         /// <summary>名前からUV番号（"UV5"等）を取得。無ければnull。</summary>
         private static string UvNum(string s)
         {
@@ -448,78 +463,16 @@ namespace VRCMaterialSwitcher
         }
 
         /// <summary>
-        /// レンダラーから使用中のマテリアルを取得し、マテリアルグループにスロット情報を自動マッピングする
+        /// マテリアルグループの適用先レンダラーを自動推定する（後方互換のための薄いラッパー）。
+        /// 実体は MaterialSwitcherRendererMatcher。詳細なレポートが必要な場合は
+        /// MaterialSwitcherRendererMatcher.MapAll を直接使う。
         /// </summary>
         /// <param name="avatarRoot">アバターのルートGameObject</param>
         /// <param name="groups">マッピング対象のマテリアルグループリスト</param>
-        /// <returns>レンダラーへのマッピングに成功したグループ数</returns>
+        /// <returns>適用先を決定できたグループ数</returns>
         public static int AutoMapRenderers(GameObject avatarRoot, List<MaterialGroup> groups)
         {
-            if (avatarRoot == null || groups == null) return 0;
-
-            var renderers = avatarRoot.GetComponentsInChildren<Renderer>(true);
-            int mappedCount = 0;
-
-            foreach (var group in groups)
-            {
-                if (group.variations.Count == 0) continue;
-
-                // グループ内の全バリエーションマテリアルを検索対象にする
-                var groupMaterials = new HashSet<Material>();
-                foreach (var v in group.variations)
-                {
-                    if (v.material != null)
-                    {
-                        groupMaterials.Add(v.material);
-                    }
-                }
-
-                if (groupMaterials.Count == 0) continue;
-
-                // このグループのマテリアルが使われている (renderer, slot) を「全て」収集する。
-                // 浴衣の上下（Yukata A/B）のように複数メッシュへ適用されるケースに対応。
-                var targets = new List<MaterialRenderTarget>();
-                var seen = new HashSet<string>();
-                Material currentMaterial = null;
-                foreach (var renderer in renderers)
-                {
-                    var sharedMats = renderer.sharedMaterials;
-                    for (int i = 0; i < sharedMats.Length; i++)
-                    {
-                        if (sharedMats[i] != null && groupMaterials.Contains(sharedMats[i]))
-                        {
-                            string path = GetRelativePath(avatarRoot.transform, renderer.transform);
-                            string key = path + "#" + i;
-                            if (seen.Add(key))
-                            {
-                                targets.Add(new MaterialRenderTarget(path, i));
-                                if (currentMaterial == null)
-                                    currentMaterial = sharedMats[i];
-                            }
-                        }
-                    }
-                }
-
-                if (targets.Count > 0)
-                {
-                    group.renderTargets = targets;
-                    // 後方互換: 単一フィールドにも先頭ターゲットを反映
-                    group.rendererPath = targets[0].rendererPath;
-                    group.materialSlotIndex = targets[0].materialSlotIndex;
-                    mappedCount++;
-
-                    // 既定バリエーションを「アバターに現在適用中のマテリアル」に合わせる
-                    // （アルファベット順先頭を既定にすると、着せたまま色が変わって見える事故になる）
-                    var current = group.variations.FirstOrDefault(v => v.material == currentMaterial);
-                    if (current != null && !current.isDefault)
-                    {
-                        foreach (var v in group.variations) v.isDefault = false;
-                        current.isDefault = true;
-                    }
-                }
-            }
-
-            return mappedCount;
+            return MaterialSwitcherRendererMatcher.MapAll(avatarRoot, groups).AdoptedGroupCount;
         }
 
         /// <summary>
