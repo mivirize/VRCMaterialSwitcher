@@ -49,6 +49,22 @@ namespace VRCMaterialSwitcher
                         string.Join(", ", missing.Select(v => v.displayName)));
             }
 
+            // 事前検証: 適用先が1つもないグループ（生成してもメニューが何もしない）
+            var unmapped = enabledGroups.Where(g => g.GetEffectiveTargets().Count == 0).ToList();
+            if (unmapped.Count > 0)
+                return SetupResult.Failure(
+                    "適用先レンダラーが未設定のグループがあります: " +
+                    string.Join(", ", unmapped.Select(g => g.groupName)) +
+                    "\n「レンダラーマッピング」で自動マッピングを実行するか、手動で指定してください。");
+
+            // 事前検証: 保存されたパスが解決できない（リネーム・階層変更・別アバター）
+            var broken = FindUnresolvableTargets(avatarRoot, enabledGroups);
+            if (broken.Count > 0)
+                return SetupResult.Failure(
+                    "適用先レンダラーが見つかりません（オブジェクト名の変更や、別アバターの設定が残っている可能性があります）:\n" +
+                    string.Join("\n", broken.Take(10)) +
+                    "\n「レンダラーマッピング」で指定し直してください。");
+
             // VRCAvatarDescriptorのExpressions設定チェックと自動アサイン
             if (descriptor.customExpressions == false)
             {
@@ -120,7 +136,7 @@ namespace VRCMaterialSwitcher
 
                 foreach (var group in enabledGroups)
                 {
-                    var result = SetupGroupMenu(setupRoot, group, paramNames[group], config);
+                    var result = SetupGroupMenu(avatarRoot, setupRoot, group, paramNames[group], config);
                     totalMenuItems += result.menuItems;
                     totalParams += result.parameters;
                     createdObjects.AddRange(result.objects);
@@ -272,6 +288,95 @@ namespace VRCMaterialSwitcher
         }
 
         /// <summary>
+        /// 設定に保存された相対パスから、Modular Avatar 用のオブジェクト参照を作る。
+        ///
+        /// AvatarObjectReference.Set() を使うのが重要:
+        ///   ・referencePath だけを代入すると直接参照 (targetObject) が空のままになり、
+        ///     解決が名前パス頼みになる。同名兄弟があると別オブジェクトへ当たりうる。
+        ///   ・アバタールート自身は空パスではなく専用値が必要で、空パスは MA 側で null 扱いになる。
+        /// Set() は両方を正しく設定する（MA 1.x の Runtime/AvatarObjectReference.cs 参照）。
+        /// </summary>
+        /// <returns>解決できなければ null</returns>
+        private static AvatarObjectReference BuildObjectReference(GameObject avatarRoot, string rendererPath)
+        {
+            GameObject target;
+            if (string.IsNullOrEmpty(rendererPath) || rendererPath == MaterialRenderTarget.AvatarRootPath)
+            {
+                target = avatarRoot; // ルート自身のレンダラー
+            }
+            else
+            {
+                var t = avatarRoot.transform.Find(rendererPath);
+                if (t == null)
+                {
+                    Debug.LogWarning($"[VRC Material Switcher] 適用先が見つかりません: '{rendererPath}'");
+                    return null;
+                }
+                target = t.gameObject;
+            }
+
+            var reference = new AvatarObjectReference();
+            reference.Set(target);
+            return reference;
+        }
+
+        /// <summary>
+        /// 設定された適用先が実際に解決できるかを事前検証する。
+        /// </summary>
+        /// <returns>解決できなかったパスの一覧（空なら全て解決可能）</returns>
+        private static List<string> FindUnresolvableTargets(GameObject avatarRoot, List<MaterialGroup> groups)
+        {
+            var broken = new List<string>();
+
+            // 同じ相対パスに解決されるレンダラーが複数ある場合、どれに適用されるかは不定になる。
+            // Modular Avatar もパス解決は Transform.Find なので、ここで止めて改名を促す。
+            var ambiguous = new HashSet<string>();
+            var byPath = new Dictionary<string, int>();
+            foreach (var s in MaterialSwitcherRendererMatcher.EnumerateSlots(avatarRoot))
+            {
+                if (s.slot != 0) continue; // レンダラー単位で数える
+                byPath.TryGetValue(s.path, out int n);
+                byPath[s.path] = n + 1;
+                if (n + 1 > 1) ambiguous.Add(s.path);
+            }
+
+            foreach (var group in groups)
+            {
+                foreach (var t in group.GetEffectiveTargets())
+                {
+                    if (t.IsAvatarRoot || string.IsNullOrEmpty(t.rendererPath))
+                    {
+                        if (avatarRoot.GetComponent<Renderer>() == null)
+                            broken.Add($"{group.groupName}: アバタールートにレンダラーがありません");
+                        continue;
+                    }
+
+                    var found = avatarRoot.transform.Find(t.rendererPath);
+                    if (found == null || found.GetComponent<Renderer>() == null)
+                    {
+                        broken.Add($"{group.groupName}: '{t.rendererPath}' が見つかりません");
+                        continue;
+                    }
+
+                    if (ambiguous.Contains(t.rendererPath))
+                    {
+                        broken.Add($"{group.groupName}: '{t.rendererPath}' は同名オブジェクトが複数あり一意に決まりません" +
+                                   "（オブジェクト名を変更してください）");
+                        continue;
+                    }
+
+                    var renderer = found.GetComponent<Renderer>();
+                    if (t.materialSlotIndex < 0 || t.materialSlotIndex >= renderer.sharedMaterials.Length)
+                    {
+                        broken.Add($"{group.groupName}: '{t.rendererPath}' にスロット {t.materialSlotIndex} がありません" +
+                                   $"（このメッシュのスロット数は {renderer.sharedMaterials.Length}）");
+                    }
+                }
+            }
+            return broken;
+        }
+
+        /// <summary>
         /// 本ツールが生成したグループオブジェクトか判定する。
         /// 名前規約（Group_ 接頭辞）と MA Menu Item(SubMenu) の両方を満たすものだけを所有物とみなし、
         /// ユーザーがルート配下に手で追加したオブジェクトを再実行で消さないようにする。
@@ -298,7 +403,7 @@ namespace VRCMaterialSwitcher
         /// 1つのマテリアルグループのメニューをセットアップ
         /// </summary>
         private static (int menuItems, int parameters, List<GameObject> objects) SetupGroupMenu(
-            GameObject setupRoot, MaterialGroup group, string paramName, SwitcherConfig config)
+            GameObject avatarRoot, GameObject setupRoot, MaterialGroup group, string paramName, SwitcherConfig config)
         {
             var objects = new List<GameObject>();
 
@@ -329,7 +434,7 @@ namespace VRCMaterialSwitcher
             {
                 var variation = enabledVariations[i];
                 bool isDefault = (i == defaultIndex);
-                var varObj = CreateVariationMenuItem(groupObj, group, variation, paramName, i, isDefault, config);
+                var varObj = CreateVariationMenuItem(avatarRoot, groupObj, group, variation, paramName, i, isDefault, config);
                 objects.Add(varObj);
                 menuItemCount++;
             }
@@ -341,6 +446,7 @@ namespace VRCMaterialSwitcher
         /// 1つのバリエーション用のToggleメニューアイテム＋MaterialSetterを作成
         /// </summary>
         private static GameObject CreateVariationMenuItem(
+            GameObject avatarRoot,
             GameObject parentObj,
             MaterialGroup group,
             MaterialVariation variation,
@@ -375,12 +481,12 @@ namespace VRCMaterialSwitcher
                 var switchObjects = new List<MaterialSwitchObject>();
                 foreach (var t in targets)
                 {
+                    var objRef = BuildObjectReference(avatarRoot, t.rendererPath);
+                    if (objRef == null) continue; // 解決できないターゲットは生成しない（呼び出し側が検証済み）
+
                     switchObjects.Add(new MaterialSwitchObject
                     {
-                        Object = new AvatarObjectReference
-                        {
-                            referencePath = t.rendererPath
-                        },
+                        Object = objRef,
                         Material = variation.material,
                         MaterialIndex = t.materialSlotIndex
                     });

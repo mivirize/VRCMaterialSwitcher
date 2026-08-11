@@ -44,6 +44,10 @@ namespace VRCMaterialSwitcher
         private MaterialGroup    pendingVarGroup;
         private MaterialVariation pendingRemoveVariation;
 
+        // ---- マッピングレポート（MaterialSwitcherRendererMatcher.MapAll の結果）----
+        private MappingReport lastMappingReport;
+        private HashSet<MaterialGroup> expandedNoCandidateGroups = new HashSet<MaterialGroup>();
+
         // ---- スタイル ----
         private GUIStyle headerStyle;
         private GUIStyle subHeaderStyle;
@@ -272,6 +276,10 @@ namespace VRCMaterialSwitcher
                     {
                         avatarDescriptor = null;
                     }
+
+                    // アバターが変わったらマッピングレポートを破棄する
+                    lastMappingReport = null;
+                    expandedNoCandidateGroups.Clear();
                 }
 
                 if (avatarDescriptor != null)
@@ -448,23 +456,32 @@ namespace VRCMaterialSwitcher
 
             if (config.materialGroups.Count > 0)
             {
-                int mapped = 0;
+                lastMappingReport = null;
+                expandedNoCandidateGroups.Clear();
                 if (avatarObject != null)
-                    mapped = MaterialVariationDetector.AutoMapRenderers(avatarObject, config.materialGroups);
+                {
+                    lastMappingReport = MaterialSwitcherRendererMatcher.MapAll(
+                        avatarObject, config.materialGroups);
+                }
 
                 string mapMsg;
-                if (avatarObject == null)
+                if (avatarObject == null || lastMappingReport == null)
                 {
                     mapMsg = "\nアバターを設定すると自動マッピングが実行されます。";
                 }
-                else if (mapped >= config.materialGroups.Count)
+                else if (lastMappingReport.AdoptedGroupCount >= config.materialGroups.Count)
                 {
                     mapMsg = $"\nレンダラー自動マッピング: 全{config.materialGroups.Count}グループ成功。";
                 }
                 else
                 {
-                    mapMsg = $"\nレンダラー自動マッピング: {mapped}/{config.materialGroups.Count}グループ成功。" +
-                             "\n未マッピングのグループは「レンダラーマッピング」で手動設定してください。";
+                    int adopted = lastMappingReport.AdoptedGroupCount;
+                    int total = config.materialGroups.Count;
+                    int needsConf = lastMappingReport.NeedsConfirmationCount;
+                    int noCandidate = lastMappingReport.NoCandidateCount;
+                    mapMsg = $"\nレンダラー自動マッピング: {adopted}/{total}グループ成功。" +
+                             $"（要確認: {needsConf} / 候補なし: {noCandidate}）\n" +
+                             "未マッピングのグループは「レンダラーマッピング」で手動設定してください。";
                 }
 
                 ShowMessage(

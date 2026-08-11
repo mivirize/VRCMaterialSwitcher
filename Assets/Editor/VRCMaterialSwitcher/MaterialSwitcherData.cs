@@ -48,8 +48,18 @@ namespace VRCMaterialSwitcher
     [Serializable]
     public class MaterialRenderTarget
     {
-        /// <summary>対象レンダラーのパス（アバタールートからの相対パス）</summary>
+        /// <summary>
+        /// アバタールート自身のレンダラーを表す番兵値。
+        /// 空文字列は「未設定」に使われるため、ルートには別の値が必要
+        /// （Modular Avatar 側も同じ理由で専用値を持つ）。
+        /// </summary>
+        public const string AvatarRootPath = "$$$AVATAR_ROOT$$$";
+
+        /// <summary>対象レンダラーのパス（アバタールートからの相対パス、ルート自身は AvatarRootPath）</summary>
         public string rendererPath;
+
+        /// <summary>アバタールート自身を指しているか</summary>
+        public bool IsAvatarRoot => rendererPath == AvatarRootPath;
 
         /// <summary>レンダラー上のマテリアルスロットインデックス</summary>
         public int materialSlotIndex;
@@ -136,6 +146,8 @@ namespace VRCMaterialSwitcher
 
             if (renderTargets != null && renderTargets.Count > 0)
             {
+                // 空パスは「未設定」（UI で追加した空エントリ）。
+                // アバタールート自身は専用の番兵値を持つので、ここで除外されない。
                 foreach (var t in renderTargets)
                     if (t != null && !string.IsNullOrEmpty(t.rendererPath))
                         result.Add(t);
