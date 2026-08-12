@@ -127,7 +127,8 @@ namespace VRCMaterialSwitcher
         // ウィンドウ表示
         // ========================================
 
-        [MenuItem("Tools/VRC Material Switcher")]
+        // MIVI ブランドの大見出し配下に配置する。priority の差 (>10) で区切り線が入る
+        [MenuItem("MIVI/VRC Material Switcher/ウィンドウを開く", false, 0)]
         public static void ShowWindow()
         {
             var window = GetWindow<MaterialSwitcherWindow>("VRC Material Switcher");

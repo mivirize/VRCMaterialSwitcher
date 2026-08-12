@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.2 (2026-08-12)
+
+### メニュー再編
+
+- メニューを `Tools > VRC Material Switcher` から **`MIVI > VRC Material Switcher`** へ移動
+  （MIVI ブランドの大見出し配下に整理）。項目: ウィンドウを開く / Fix Streaming Mip Maps
+  (Project-wide) / 残骸パラメータのクリーンアップ
+- `Fix Streaming Mip Maps (Scene Avatars)` を削除（Project-wide と役割が重複し使われていなかったため）
+
 ## v1.2.1 (2026-08-11)
 
 ### 自動マッピングの全面改修 (最重要)

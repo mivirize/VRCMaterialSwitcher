@@ -1,7 +1,6 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-using System.Collections.Generic;
 
 namespace VRCMaterialSwitcher
 {
@@ -10,7 +9,7 @@ namespace VRCMaterialSwitcher
     /// </summary>
     public static class StreamingMipMapFixer
     {
-        [MenuItem("Tools/VRC Material Switcher/Fix Streaming Mip Maps (Project-wide)")]
+        [MenuItem("MIVI/VRC Material Switcher/Fix Streaming Mip Maps (Project-wide)", false, 40)]
         public static void FixProjectWide()
         {
             if (!EditorUtility.DisplayDialog("Fix Streaming Mip Maps (Project-wide)",
@@ -60,76 +59,8 @@ namespace VRCMaterialSwitcher
             EditorUtility.DisplayDialog("Fix Streaming Mip Maps", msg, "OK");
         }
 
-        [MenuItem("Tools/VRC Material Switcher/Fix Streaming Mip Maps (Scene Avatars)")]
-        public static void FixSceneAvatars()
-        {
-            // シーン内のアバタールートを探す
-            var descriptors = Object.FindObjectsOfType<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
-            if (descriptors.Length == 0)
-            {
-                EditorUtility.DisplayDialog("Fix Streaming Mip Maps", "シーンにアバターが見つかりません。", "OK");
-                return;
-            }
-
-            if (!EditorUtility.DisplayDialog("Fix Streaming Mip Maps (Scene Avatars)",
-                $"シーン内の {descriptors.Length} 体のアバターが参照するテクスチャのうち、Mipmap が有効で Streaming Mip Maps が無効なものを一括で有効にしますか？",
-                "はい", "いいえ"))
-            {
-                return;
-            }
-
-            int fixedCount = 0;
-            var processed = new HashSet<string>();
-
-            AssetDatabase.StartAssetEditing();
-            try
-            {
-                foreach (var desc in descriptors)
-                {
-                    var renderers = desc.GetComponentsInChildren<Renderer>(true);
-                    foreach (var renderer in renderers)
-                    {
-                        foreach (var mat in renderer.sharedMaterials)
-                        {
-                            if (mat == null) continue;
-
-                            var shader = mat.shader;
-                            for (int i = 0; i < ShaderUtil.GetPropertyCount(shader); i++)
-                            {
-                                if (ShaderUtil.GetPropertyType(shader, i) != ShaderUtil.ShaderPropertyType.TexEnv)
-                                    continue;
-
-                                string propName = ShaderUtil.GetPropertyName(shader, i);
-                                var tex = mat.GetTexture(propName) as Texture2D;
-                                if (tex == null) continue;
-
-                                string path = AssetDatabase.GetAssetPath(tex);
-                                if (string.IsNullOrEmpty(path) || processed.Contains(path)) continue;
-                                processed.Add(path);
-
-                                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-                                if (importer == null) continue;
-                                if (!importer.mipmapEnabled || importer.streamingMipmaps) continue;
-
-                                importer.streamingMipmaps = true;
-                                importer.SaveAndReimport();
-                                fixedCount++;
-                            }
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                AssetDatabase.StopAssetEditing();
-            }
-
-            string msg = fixedCount > 0
-                ? $"{fixedCount} 個のテクスチャで Streaming Mip Maps を有効にしました。"
-                : "修正が必要なテクスチャはありませんでした。";
-            Debug.Log($"[StreamingMipMapFixer] {msg}");
-            EditorUtility.DisplayDialog("Fix Streaming Mip Maps", msg, "OK");
-        }
+        // v1.2.2: "Fix Streaming Mip Maps (Scene Avatars)" は Project-wide と役割が重複し
+        // 使われていなかったためメニューごと削除した（履歴は git 参照）。
     }
 }
 #endif

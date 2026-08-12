@@ -27,13 +27,13 @@ Modular Avatar の Expression Menu（ゲーム内メニュー）として一括�
 
 1. [Releases](../../releases) から最新の `VRCMaterialSwitcher.unitypackage` をダウンロード
 2. Unity プロジェクトへドラッグ＆ドロップでインポート
-3. メニューに `Tools > VRC Material Switcher` が追加されます
+3. メニューに `MIVI > VRC Material Switcher` が追加されます
 
 > v1.1 以前から更新する場合は、先に `Assets/Editor/VRCMaterialSwitcher` フォルダを削除してからインポートしてください。
 
 ## 使い方（3 分クイックスタート）
 
-1. アバターと衣装をシーンに配置した状態で `Tools > VRC Material Switcher` を開く
+1. アバターと衣装をシーンに配置した状態で `MIVI > VRC Material Switcher > ウィンドウを開く` を選ぶ
 2. **アバター**欄にシーン上のアバターを設定（「シーンからアバターを自動検出」でも可）
 3. **スキャンフォルダ**に衣装のマテリアルが入ったフォルダを設定し、**「🔍 スキャン実行」**
 4. 検出されたグループを確認する

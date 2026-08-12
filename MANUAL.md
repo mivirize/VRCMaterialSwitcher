@@ -292,12 +292,11 @@ Max Size を戻せば元に戻ります）。
 
 ## 11. ユーティリティ
 
-`Tools > VRC Material Switcher` 配下:
+`MIVI > VRC Material Switcher` 配下:
 
 | メニュー | 用途 |
 |---|---|
 | Fix Streaming Mip Maps (Project-wide) | プロジェクト全体で、Mipmap 有効なのに Streaming Mip Maps が無効なテクスチャを一括修正（VRChat アップロード時のバリデーションエラー対策） |
-| Fix Streaming Mip Maps (Scene Avatars) | シーン上のアバターが参照するテクスチャのみ修正 |
 | 残骸パラメータのクリーンアップ (選択アバター) | v1.0 系（FX 直接書き込み方式）が残した `MatSwitch_*` パラメータ・FX レイヤーを、**削除対象を確認したうえで**選択中のアバターから削除 |
 | Export UnityPackage (Dev) | 開発者用。配布パッケージには含まれません |
 
@@ -320,7 +319,7 @@ UI に表示される判断根拠（どの証拠が一致し、どこで足り�
 - ローカルでは Gesture Manager / Av3Emulator でのみ動作確認できます（エディタの再生だけでは動きません）
 
 ### アップロード時に "mipmapped textures without Streaming Mip Maps" エラー
-`Tools > VRC Material Switcher > Fix Streaming Mip Maps (Project-wide)` を実行してください。
+`MIVI > VRC Material Switcher > Fix Streaming Mip Maps (Project-wide)` を実行してください。
 
 ### パラメータ上限 (256 bit) を超えた
 - 不要なグループのチェックを外す（1 グループ = 8 bit）
