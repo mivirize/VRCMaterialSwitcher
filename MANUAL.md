@@ -292,7 +292,7 @@ Max Size を戻せば元に戻ります）。
 
 ## 11. ユーティリティ
 
-`MIVI > VRC Material Switcher` 配下:
+`MIVI Works > VRC Material Switcher` 配下:
 
 | メニュー | 用途 |
 |---|---|
@@ -319,7 +319,7 @@ UI に表示される判断根拠（どの証拠が一致し、どこで足り�
 - ローカルでは Gesture Manager / Av3Emulator でのみ動作確認できます（エディタの再生だけでは動きません）
 
 ### アップロード時に "mipmapped textures without Streaming Mip Maps" エラー
-`MIVI > VRC Material Switcher > Fix Streaming Mip Maps (Project-wide)` を実行してください。
+`MIVI Works > VRC Material Switcher > Fix Streaming Mip Maps (Project-wide)` を実行してください。
 
 ### パラメータ上限 (256 bit) を超えた
 - 不要なグループのチェックを外す（1 グループ = 8 bit）

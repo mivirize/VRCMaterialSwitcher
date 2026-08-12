@@ -66,6 +66,8 @@ namespace VRCMaterialSwitcher
                     if (GUILayout.Button("＋ 新規グループ作成", GUILayout.Height(24)))
                     {
                         AddNewGroup();
+                        // Fix #11: グループ追加後はレイアウト制御数が変わるため打ち切る
+                        GUIUtility.ExitGUI();
                     }
                     GUI.backgroundColor = Color.white;
 
@@ -157,8 +159,10 @@ namespace VRCMaterialSwitcher
                 if (!string.IsNullOrEmpty(group.warning))
                     EditorGUILayout.HelpBox(group.warning, MessageType.Warning);
 
-                EditorGUI.indentLevel++;
-
+                // Fix #12: ここでは字下げしない。
+                // グループ枠 (groupBoxStyle) が既に左右 padding を持っており、
+                // さらに indentLevel を足すと固定幅の列 (マーカー等) が内側から
+                // 削られて文字が潰れる。字下げは枠の padding に任せる。
                 // グループ名編集（手動作成・リネーム対応）
                 using (new EditorGUILayout.HorizontalScope())
                 {
@@ -183,11 +187,13 @@ namespace VRCMaterialSwitcher
                         }
 
                         // デフォルトマーカー
-                        EditorGUILayout.LabelField(variation.isDefault ? "● " : "○ ", GUILayout.Width(20));
+                        EditorGUILayout.LabelField(
+                            variation.isDefault ? "●" : "○",
+                            GUILayout.Width(14));
 
-                        // 表示名編集
+                        // 表示名編集（狭いウィンドウでも潰れないよう下限を持たせる）
                         variation.displayName = EditorGUILayout.TextField(
-                            variation.displayName, GUILayout.Width(100));
+                            variation.displayName, GUILayout.MinWidth(70), GUILayout.MaxWidth(120));
 
                         // マテリアル参照
                         EditorGUI.BeginChangeCheck();
@@ -228,9 +234,11 @@ namespace VRCMaterialSwitcher
                     bool isFirst = group.variations.Count == 0;
                     group.variations.Add(new MaterialVariation("new", null, isFirst));
                     configDirty = true;
+                    // Fix #11: バリエーション追加後はレイアウト制御数が変わるため
+                    // 現フレームを打ち切り Layout/Repaint を作り直す
+                    GUIUtility.ExitGUI();
                 }
 
-                EditorGUI.indentLevel--;
             }
         }
     }

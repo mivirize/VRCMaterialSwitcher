@@ -9,7 +9,7 @@ namespace VRCMaterialSwitcher
     /// </summary>
     public static class StreamingMipMapFixer
     {
-        [MenuItem("MIVI/VRC Material Switcher/Fix Streaming Mip Maps (Project-wide)", false, 40)]
+        [MenuItem("MIVI Works/VRC Material Switcher/Fix Streaming Mip Maps (Project-wide)", false, 40)]
         public static void FixProjectWide()
         {
             if (!EditorUtility.DisplayDialog("Fix Streaming Mip Maps (Project-wide)",
