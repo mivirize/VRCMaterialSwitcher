@@ -35,3 +35,6 @@ desktop.ini
 
 # Distribution artifacts (shipped via GitHub Releases, not the repo)
 *.unitypackage
+
+# BOOTH 配布物のビルド成果 (ZIP・商品画像) は配布サイトへ直接アップロードする
+dist/
