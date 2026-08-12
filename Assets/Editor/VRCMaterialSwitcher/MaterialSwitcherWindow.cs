@@ -53,6 +53,10 @@ namespace VRCMaterialSwitcher
         private GUIStyle subHeaderStyle;
         private GUIStyle boxStyle;
         private GUIStyle groupBoxStyle;
+        // Fix #11: NonSerialized によりドメインリロード後に必ず再初期化される。
+        // stylesInitialized が true のまま残ると stale な GUIStyle が使われ
+        // レイアウト幅の計算がずれ、ウィンドウ右側が徐々に狭まる原因になる。
+        [System.NonSerialized]
         private bool     stylesInitialized;
 
         // ---- 解像度ダウン UI の状態（DrawSetupSection / ApplyReduce で共有）----
@@ -127,8 +131,8 @@ namespace VRCMaterialSwitcher
         // ウィンドウ表示
         // ========================================
 
-        // MIVI ブランドの大見出し配下に配置する。priority の差 (>10) で区切り線が入る
-        [MenuItem("MIVI/VRC Material Switcher/ウィンドウを開く", false, 0)]
+        // MIVI Works ブランドの大見出し配下に配置する。priority の差 (>10) で区切り線が入る
+        [MenuItem("MIVI Works/VRC Material Switcher/ウィンドウを開く", false, 0)]
         public static void ShowWindow()
         {
             var window = GetWindow<MaterialSwitcherWindow>("VRC Material Switcher");
@@ -181,9 +185,22 @@ namespace VRCMaterialSwitcher
             // 反復中のコレクション変更を避けるため、削除はフレーム冒頭でまとめて処理する
             ProcessPendingRemovals();
 
+            // Fix #12: ラベル幅をウィンドウ幅に追従させる。
+            // 既定の 150px 固定はウィンドウを狭めると入力欄側を圧迫し、
+            // 右側が使えなくなったように見える。
+            EditorGUIUtility.labelWidth = Mathf.Clamp(position.width * 0.32f, 80f, 150f);
+
             EditorGUI.BeginChangeCheck();
 
-            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+            // Fix #12: 横スクロールバーを出さない。
+            // 既定の BeginScrollView は内容が幅を超えると横スクロールを許し、
+            // 右側が見切れる（＝狭まったように見える）。横方向は常に幅に収める。
+            scrollPosition = EditorGUILayout.BeginScrollView(
+                scrollPosition,
+                false, false,
+                GUIStyle.none,                  // 横スクロールバーを描画しない
+                GUI.skin.verticalScrollbar,
+                GUI.skin.scrollView);
 
             DrawHeader();
 
@@ -331,6 +348,9 @@ namespace VRCMaterialSwitcher
                     if (GUILayout.Button("🔍 スキャン実行", GUILayout.Height(28)))
                     {
                         RunScan();
+                        // Fix #11: スキャン後はグループ数が変わり、以降のセクションの
+                        // レイアウト制御数が変わるため現フレームを打ち切る
+                        GUIUtility.ExitGUI();
                     }
                     GUI.enabled = true;
 
@@ -342,6 +362,8 @@ namespace VRCMaterialSwitcher
                             ungroupedMaterials?.Clear();
                             configDirty = true;
                             ShowMessage("マテリアルグループをクリアしました。", MessageType.Info);
+                            // Fix #11: クリア後もセクション表示が変わるため打ち切る
+                            GUIUtility.ExitGUI();
                         }
                     }
                 }

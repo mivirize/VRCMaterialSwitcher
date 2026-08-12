@@ -43,7 +43,7 @@ namespace VRCMaterialSwitcher
             return paths;
         }
 
-        [MenuItem("MIVI/VRC Material Switcher/Export UnityPackage (Dev)", false, 100)]
+        [MenuItem("MIVI Works/VRC Material Switcher/Export UnityPackage (Dev)", false, 100)]
         public static void Export()
         {
             string outputPath;

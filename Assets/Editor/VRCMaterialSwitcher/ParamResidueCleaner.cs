@@ -22,7 +22,7 @@ namespace VRCMaterialSwitcher
     {
         private const string PARAMETER_PREFIX = "MatSwitch_";
 
-        [MenuItem("MIVI/VRC Material Switcher/残骸パラメータのクリーンアップ (選択アバター)", false, 41)]
+        [MenuItem("MIVI Works/VRC Material Switcher/残骸パラメータのクリーンアップ (選択アバター)", false, 41)]
         public static void CleanupResiduesMenu()
         {
             var avatar = FindTargetAvatar();
